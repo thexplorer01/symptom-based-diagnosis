@@ -1,0 +1,63 @@
+import streamlit as st
+import pandas as pd
+import joblib
+import numpy as np
+import os
+
+st.set_page_config(page_title="Disease Detector", layout="centered")
+
+MODEL_PATH = "models/model.joblib"
+LE_PATH = "models/label_encoder.joblib"
+if not os.path.exists(MODEL_PATH):
+    st.error("Model not found. Run train_model.py first and place model.joblib in models/")
+else:
+    model = joblib.load(MODEL_PATH)
+    le = joblib.load(LE_PATH)
+
+    st.title("Disease Detection from Symptoms")
+    st.write("Select the symptoms you (or patient) are experiencing:")
+
+    symptoms = [
+        "fever", "cough", "fatigue", "headache", "sore_throat", "runny_nose",
+        "shortness_of_breath", "chest_pain", "vomiting", "diarrhea",
+        "abdominal_pain", "joint_pain", "rash", "sneezing", "loss_of_smell",
+        "loss_of_taste"
+    ]
+
+    cols = st.columns(4)
+    chosen = {}
+    for i, s in enumerate(symptoms):
+        with cols[i % 4]:
+            chosen[s] = st.checkbox(s.replace("_", " ").capitalize(), value=False)
+
+    if st.button("Predict"):
+        x = np.array([int(chosen[s]) for s in symptoms]).reshape(1, -1)
+        probs = model.predict_proba(x)[0]
+        pred_idx = np.argmax(probs)
+        pred = le.inverse_transform([pred_idx])[0]
+
+        st.subheader(f"Predicted disease: {pred}")
+        st.write(f"Confidence: {probs[pred_idx]*100:.2f}%")
+
+        top5_idx = np.argsort(probs)[::-1][:5]
+        top5 = [(le.inverse_transform([i])[0], probs[i]) for i in top5_idx]
+        st.write("Top predictions:")
+        for d, p in top5:
+            st.write(f"- {d}: {p*100:.2f}%")
+
+        guidance = {
+            "Common Cold": "Rest, fluids, OTC cold meds. See doctor if symptoms worsen or persist >7 days.",
+            "Flu": "Rest, fluids, consider medical advice, antiviral therapy if <48 hours and high risk.",
+            "COVID-19": "Isolate, test for COVID-19, seek medical care if breathing difficulty.",
+            "Gastroenteritis": "Rehydrate, avoid solid food until vomiting subsides. See doctor if severe or dehydrated.",
+            "Malaria": "Seek immediate medical attention - malaria can be serious.",
+            "Dengue": "Seek immediate medical attention - watch for warning signs (bleeding, severe pain).",
+            "Migraine": "Rest in dark room, OTC pain relievers. See neurologist for frequent migraines.",
+            "Food Poisoning": "Rehydrate, see doctor if severe or prolonged.",
+            "Allergy": "Antihistamines, avoid trigger, see allergist for recurrent problems.",
+            "Bronchitis": "Rest, fluids, see doctor if high fever or breathing difficulty."
+        }
+        st.markdown("**Suggested (non-medical) guidance:**")
+        st.write(guidance.get(pred, "Please consult a healthcare professional."))
+
+        st.warning("This tool provides informative predictions only. Not a medical diagnosis. Consult a healthcare professional for medical decisions.")
